@@ -48,25 +48,25 @@ php -m | grep curl   # 应该输出 curl
 在你**本地电脑的 PowerShell** 里执行：
 
 ```powershell
-# 把整个 baidu-search 文件夹上传到服务器
-scp -r e:\JOB-BOX\baidu-search\ root@你的服务器IP:/var/www/search-api/
+# 把整个 web-search 文件夹上传到服务器
+scp -r web-search\ root@你的服务器IP:/var/www/search-api/
 ```
 
 ### 方式 B：先压缩再传
 
 ```powershell
 # 本地压缩
-cd e:\JOB-BOX
-Compress-Archive -Path baidu-search -DestinationPath baidu-search.zip
+cd web-search
+Compress-Archive -Path web-search -DestinationPath web-search.zip
 
 # 上传
-scp e:\JOB-BOX\baidu-search.zip root@你的服务器IP:/tmp/
+scp web-search.zip root@你的服务器IP:/tmp/
 
 # SSH 到服务器解压
 ssh root@你的服务器IP
 sudo mkdir -p /var/www/search-api
-sudo unzip /tmp/baidu-search.zip -d /var/www/search-api/
-rm /tmp/baidu-search.zip
+sudo unzip /tmp/web-search.zip -d /var/www/search-api/
+rm /tmpweb-search.zip
 ```
 
 ### 设置权限
