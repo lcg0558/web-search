@@ -1,0 +1,39 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # 如果请求的是真实文件或目录，直接访问
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+
+    # 其他请求都走 index.php
+    RewriteRule ^(.*)$ index.php [QSA,L]
+</IfModule>
+
+# 安全：禁止直接访问配置和源码
+<IfModule mod_authz_core.c>
+    <FilesMatch "^(config\.php|src/)">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+
+# 禁止访问缓存目录
+<IfModule mod_authz_core.c>
+    <Directory "cache">
+        Require all denied
+    </Directory>
+</IfModule>
+
+# 禁止 .git 等隐藏文件
+<IfModule mod_authz_core.c>
+    <DirectoryMatch "^\.|\.git">
+        Require all denied
+    </DirectoryMatch>
+</IfModule>
+
+# 安全头
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set X-XSS-Protection "1; mode=block"
+    Header set Referrer-Policy "no-referrer"
+</IfModule>

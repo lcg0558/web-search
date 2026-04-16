@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全网搜索 API</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // 自动检测项目基地址（支持子目录部署）
+        const basePath = (() => {
+            const path = window.location.pathname;
+            // 如果在根目录（如 localhost:8080/），返回空
+            if (path === '/' || path === '/index.html') return '';
+            // 如果在子目录（如 /baidu-search/），返回子目录路径
+            const match = path.match(/^(\/[^/]+\/)/);
+            return match ? match[1] : '';
+        })();
+
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        bg: '#0a0e1a',
+                        card: '#111827',
+                        border: '#1e293b',
+                        accent: '#4fc3f7',
+                        accent2: '#7c4dff',
+                        muted: '#64748b',
+                        success: '#00e676',
+                        danger: '#ff5252',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Noto Sans SC', system-ui, sans-serif;
+            background: #0a0e1a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+
+        /* 搜索框发光效果 */
+        .search-glow {
+            box-shadow: 0 0 0 1px rgba(79, 195, 247, 0.2);
+            transition: box-shadow 0.3s ease;
+        }
+        .search-glow:focus-within {
+            box-shadow: 0 0 0 2px rgba(79, 195, 247, 0.5), 0 0 30px rgba(79, 195, 247, 0.15);
+        }
+
+        /* 结果卡片悬停 */
+        .result-card {
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+        }
+        .result-card:hover {
+            border-color: rgba(79, 195, 247, 0.3);
+            background: #162032 !important;
+        }
+
+        /* 加载动画 */
+        .pulse-dot {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        .pulse-dot:nth-child(2) { animation-delay: 0.2s; }
+        .pulse-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes pulse {
+            0%, 100% { opacity: 0.3; transform: scale(0.8); }
+            50% { opacity: 1; transform: scale(1.2); }
+        }
+
+        /* 滚动条 */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0a0e1a; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #334155; }
+
+        /* 标签页 */
+        .tab-active {
+            color: #4fc3f7;
+            border-bottom: 2px solid #4fc3f7;
+        }
+
+        /* 搜索建议 */
+        .suggestion-item:hover {
+            background: #162032;
+        }
+
+        /* JSON 格式化 */
+        .json-key { color: #7c4dff; }
+        .json-string { color: #4fc3f7; }
+        .json-number { color: #00e676; }
+        .json-bracket { color: #64748b; }
+
+        /* 渐入动画 */
+        .fade-in {
+            animation: fadeIn 0.3s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 背景网格 */
+        .bg-grid {
+            background-image: 
+                linear-gradient(rgba(79, 195, 247, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(79, 195, 247, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+    </style>
+</head>
+<body class="bg-grid">
+
+    <!-- 顶部导航 -->
+    <nav class="border-b border-border/50 backdrop-blur-md bg-bg/80 sticky top-0 z-50">
+        <div class="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-accent to-accent2 flex items-center justify-center text-white font-bold text-sm">搜</div>
+                <span class="text-lg font-medium">多引擎搜索 API</span>
+                <span class="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full">SearXNG 兼容 · 5引擎</span>
+            </div>
+            <div class="flex items-center gap-4 text-sm text-muted">
+                <a href="/api" class="hover:text-accent transition-colors" target="_blank">API 文档</a>
+                <a href="/health" class="hover:text-accent transition-colors" target="_blank">状态</a>
+                <a href="https://github.com/searxng/searxng" class="hover:text-accent transition-colors" target="_blank">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主内容 -->
+    <main class="max-w-6xl mx-auto px-4 py-8">
+
+        <!-- 搜索区域 -->
+        <div id="searchSection" class="max-w-2xl mx-auto mt-16 mb-12">
+            <h1 class="text-3xl font-bold text-center mb-2">
+                <span class="bg-gradient-to-r from-accent to-accent2 bg-clip-text text-transparent">全网搜索</span>
+                <span class="text-white">&不追踪</span>
+            </h1>
+            <p class="text-center text-muted mb-8">支持百度/必应/搜狗/360/夸克，兼容 SearXNG API 格式，自动引擎降级</p>
+
+            <div class="search-glow rounded-xl bg-card overflow-hidden">
+                <div class="flex items-center px-4">
+                    <svg class="w-5 h-5 text-muted flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                    <input id="searchInput" type="text" placeholder="搜索任意内容..." 
+                        class="w-full px-4 py-4 bg-transparent text-white text-lg outline-none placeholder-muted"
+                        autocomplete="off" autofocus>
+                    <select id="formatSelect" class="bg-bg text-sm text-accent border border-border rounded-lg px-3 py-1.5 outline-none cursor-pointer">
+                        <option value="json">JSON</option>
+                        <option value="html">HTML</option>
+                        <option value="csv">CSV</option>
+                        <option value="rss">RSS</option>
+                    </select>
+                    <button id="searchBtn" class="ml-3 px-5 py-2 bg-accent/20 text-accent rounded-lg hover:bg-accent/30 transition-colors font-medium text-sm">
+                        搜索
+                    </button>
+                </div>
+            </div>
+
+            <!-- 搜索建议 -->
+            <div id="suggestions" class="hidden mt-1 bg-card rounded-xl border border-border overflow-hidden shadow-xl"></div>
+
+            <!-- 快捷示例 -->
+            <div class="mt-4 flex flex-wrap gap-2 justify-center">
+                <span class="text-xs text-muted">试试：</span>
+                <button onclick="quickSearch('PHP 教程')" class="text-xs bg-card border border-border px-3 py-1 rounded-full hover:border-accent/50 hover:text-accent transition-colors">PHP 教程</button>
+                <button onclick="quickSearch('Laravel 开发')" class="text-xs bg-card border border-border px-3 py-1 rounded-full hover:border-accent/50 hover:text-accent transition-colors">Laravel 开发</button>
+                <button onclick="quickSearch('Python 量化交易')" class="text-xs bg-card border border-border px-3 py-1 rounded-full hover:border-accent/50 hover:text-accent transition-colors">Python 量化交易</button>
+                <button onclick="quickSearch('股票数据分析')" class="text-xs bg-card border border-border px-3 py-1 rounded-full hover:border-accent/50 hover:text-accent transition-colors">股票数据分析</button>
+            </div>
+        </div>
+
+        <!-- 搜索结果区域 -->
+        <div id="resultsSection" class="hidden">
+            <!-- 结果头部信息 -->
+            <div id="resultsHeader" class="flex items-center justify-between mb-6">
+                <div class="flex items-center gap-4">
+                    <span id="resultCount" class="text-sm text-muted"></span>
+                    <span id="engineBadge" class="text-xs bg-accent2/20 text-accent2 px-1.5 py-0.5 rounded hidden"></span>
+                    <span id="resultTime" class="text-xs text-accent/60"></span>
+                </div>
+                <div class="flex gap-1 text-sm">
+                    <button onclick="switchTab('web')" id="tabWeb" class="px-3 py-1 tab-active transition-colors">网页</button>
+                    <button onclick="switchTab('raw')" id="tabRaw" class="px-3 py-1 text-muted hover:text-white transition-colors">原始数据</button>
+                    <button onclick="switchTab('api')" id="tabApi" class="px-3 py-1 text-muted hover:text-white transition-colors">API 调用</button>
+                </div>
+            </div>
+
+            <!-- 网页结果 -->
+            <div id="resultsWeb" class="space-y-4"></div>
+
+            <!-- 原始 JSON -->
+            <div id="resultsRaw" class="hidden">
+                <div class="bg-card rounded-xl border border-border p-4 overflow-auto max-h-[70vh]">
+                    <pre id="rawJson" class="text-sm font-mono leading-relaxed"></pre>
+                </div>
+            </div>
+
+            <!-- API 调用示例 -->
+            <div id="resultsApi" class="hidden">
+                <div class="space-y-4">
+                    <div class="bg-card rounded-xl border border-border p-4">
+                        <div class="text-xs text-muted mb-2">JSON 格式</div>
+                        <code id="apiJson" class="text-sm font-mono text-accent break-all"></code>
+                    </div>
+                    <div class="bg-card rounded-xl border border-border p-4">
+                        <div class="text-xs text-muted mb-2">CSV 格式</div>
+                        <code id="apiCsv" class="text-sm font-mono text-accent break-all"></code>
+                    </div>
+                    <div class="bg-card rounded-xl border border-border p-4">
+                        <div class="text-xs text-muted mb-2">RSS 格式</div>
+                        <code id="apiRss" class="text-sm font-mono text-accent break-all"></code>
+                    </div>
+                    <div class="bg-card rounded-xl border border-border p-4">
+                        <div class="text-xs text-muted mb-2">cURL 命令</div>
+                        <code id="apiCurl" class="text-sm font-mono text-success break-all"></code>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 分页 -->
+            <div id="pagination" class="flex items-center justify-center gap-4 mt-8"></div>
+
+            <!-- 引擎降级提示 -->
+            <div id="engineWarning" class="hidden mt-4 text-center text-sm" style="color:#ffc107;"></div>
+        </div>
+
+        <!-- 加载中 -->
+        <div id="loading" class="hidden text-center py-16">
+            <div class="flex justify-center gap-2 mb-4">
+                <div class="w-3 h-3 rounded-full bg-accent pulse-dot"></div>
+                <div class="w-3 h-3 rounded-full bg-accent pulse-dot"></div>
+                <div class="w-3 h-3 rounded-full bg-accent pulse-dot"></div>
+            </div>
+            <p class="text-muted text-sm">正在搜索...</p>
+        </div>
+
+        <!-- 错误 -->
+        <div id="error" class="hidden text-center py-16">
+            <div class="text-danger text-4xl mb-4">⚠</div>
+            <p id="errorMsg" class="text-muted"></p>
+        </div>
+
+    </main>
+
+    <!-- 底部 -->
+    <footer class="border-t border-border/30 mt-16 py-6 text-center text-xs text-muted">
+        <p>多引擎搜索 · SearXNG API 兼容 · 百度/必应/搜狗/360/夸克 · 不追踪不画像</p>
+    </footer>
+
+    <script>
+        // ===== 状态 =====
+        let currentQuery = '';
+        let currentPage = 1;
+        let currentFormat = 'json';
+        let rawResponse = null;
+        let suggestTimer = null;
+
+        // ===== DOM =====
+        const $ = id => document.getElementById(id);
+        const searchInput = $('searchInput');
+        const searchBtn = $('searchBtn');
+        const formatSelect = $('formatSelect');
+
+        // ===== 事件 =====
+        searchInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter') doSearch();
+        });
+        searchBtn.addEventListener('click', doSearch);
+        searchInput.addEventListener('input', e => {
+            clearTimeout(suggestTimer);
+            suggestTimer = setTimeout(() => fetchSuggestions(e.target.value), 300);
+        });
+        searchInput.addEventListener('blur', () => {
+            setTimeout(() => $('suggestions').classList.add('hidden'), 200);
+        });
+        searchInput.addEventListener('focus', () => {
+            if ($('suggestions').children.length > 0) {
+                $('suggestions').classList.remove('hidden');
+            }
+        });
+
+        // ===== 搜索 =====
+        function doSearch(page = 1) {
+            const query = searchInput.value.trim();
+            if (!query) return;
+
+            currentQuery = query;
+            currentPage = page;
+            currentFormat = formatSelect.value;
+
+            $('suggestions').classList.add('hidden');
+            $('searchSection').classList.remove('mt-16', 'mb-12');
+            $('searchSection').classList.add('mt-4', 'mb-6');
+            $('loading').classList.remove('hidden');
+            $('resultsSection').classList.add('hidden');
+            $('error').classList.add('hidden');
+
+            const url = `${basePath}search?q=${encodeURIComponent(query)}&format=json&pageno=${page}`;
+
+            fetch(url)
+                .then(res => {
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    return res.json();
+                })
+                .then(data => {
+                    if (data.error) throw new Error(data.error);
+                    rawResponse = data;
+                    renderResults(data);
+                })
+                .catch(err => {
+                    $('loading').classList.add('hidden');
+                    $('error').classList.remove('hidden');
+                    $('errorMsg').textContent = err.message;
+                });
+        }
+
+        function quickSearch(q) {
+            searchInput.value = q;
+            doSearch();
+        }
+
+        // ===== 搜索建议 =====
+        function fetchSuggestions(query) {
+            if (!query || query.length < 2) {
+                $('suggestions').classList.add('hidden');
+                return;
+            }
+
+            fetch(`${basePath}suggest?q=${encodeURIComponent(query)}`)
+                .then(res => res.json())
+                .then(data => {
+                    const suggestions = data[1] || [];
+                    if (suggestions.length === 0) {
+                        $('suggestions').classList.add('hidden');
+                        return;
+                    }
+
+                    const container = $('suggestions');
+                    container.innerHTML = suggestions.map(s => `
+                        <div class="suggestion-item px-4 py-2 cursor-pointer text-sm hover:text-accent transition-colors"
+                             onclick="searchInput.value='${s.replace(/'/g, "\\'")}'; doSearch();">
+                            <svg class="w-4 h-4 inline mr-2 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                            </svg>
+                            ${escapeHtml(s)}
+                        </div>
+                    `).join('');
+                    container.classList.remove('hidden');
+                })
+                .catch(() => {});
+        }
+
+        // ===== 渲染结果 =====
+        function renderResults(data) {
+            $('loading').classList.add('hidden');
+            $('resultsSection').classList.remove('hidden');
+
+            const results = data.results || [];
+            const engine = data.engine || 'unknown';
+            const warning = data.warning || '';
+
+            $('resultCount').textContent = `约 ${data.number_of_results || results.length} 条结果`;
+            $('resultTime').textContent = `${(data.time_taken || 0).toFixed(2)}s`;
+
+            // 引擎标签
+            const badge = $('engineBadge');
+            const engineNames = { 
+                baidu: '百度', 
+                bing: '必应', 
+                sogou: '搜狗', 
+                so360: '360搜索', 
+                quark: '夸克' 
+            };
+            const engineColors = {
+                baidu: 'bg-accent2/20 text-accent2',
+                bing: 'bg-orange-500/20 text-orange-400',
+                sogou: 'bg-green-500/20 text-green-400',
+                so360: 'bg-red-500/20 text-red-400',
+                quark: 'bg-blue-400/20 text-blue-300',
+            };
+            badge.textContent = engineNames[engine] || engine;
+            badge.className = 'text-xs px-1.5 py-0.5 rounded ' + (engineColors[engine] || 'bg-muted/20 text-white');
+            badge.classList.remove('hidden');
+
+            // 降级提示
+            const warnEl = $('engineWarning');
+            if (warning) {
+                warnEl.textContent = '⚠ ' + warning;
+                warnEl.classList.remove('hidden');
+            } else {
+                warnEl.classList.add('hidden');
+            }
+
+            // 网页结果
+            const webContainer = $('resultsWeb');
+            if (results.length === 0) {
+                webContainer.innerHTML = `
+                    <div class="text-center py-16 text-muted">
+                        <p class="text-4xl mb-4">🔍</p>
+                        <p>没有找到相关结果</p>
+                    </div>`;
+            } else {
+                webContainer.innerHTML = results.map((r, i) => {
+                    let host = '';
+                    try { host = new URL(r.url).hostname; } catch(e) { host = r.url; }
+                    const resultEngine = r.engine || engine;
+                    const engName = engineNames[resultEngine] || resultEngine;
+                    const engColorMap = {
+                        baidu: 'bg-accent2/20 text-accent2',
+                        bing: 'bg-orange-500/20 text-orange-400',
+                        sogou: 'bg-green-500/20 text-green-400',
+                        so360: 'bg-red-500/20 text-red-400',
+                        quark: 'bg-blue-400/20 text-blue-300',
+                    };
+                    const engColor = engColorMap[resultEngine] || 'bg-muted/20 text-white';
+                    return `
+                    <div class="result-card bg-card rounded-xl p-5 fade-in" style="animation-delay: ${i * 0.05}s">
+                        <div class="text-xs text-muted mb-1 flex items-center gap-2">
+                            <span class="${engColor} px-1.5 py-0.5 rounded text-xs">${engName}</span>
+                            <span class="truncate">${escapeHtml(host)}</span>
+                        </div>
+                        <a href="${escapeHtml(r.url)}" target="_blank" rel="noopener" 
+                           class="text-accent hover:text-white text-lg font-medium leading-snug block mt-1 transition-colors">
+                            ${escapeHtml(r.title)}
+                        </a>
+                        <p class="text-sm text-muted/80 mt-2 leading-relaxed line-clamp-2">${escapeHtml(r.snippet)}</p>
+                    </div>`;
+                }).join('');
+            }
+
+            // 原始 JSON
+            $('rawJson').innerHTML = syntaxHighlight(JSON.stringify(data, null, 2));
+
+            // API 调用示例
+            const base = window.location.origin + basePath;
+            const q = encodeURIComponent(currentQuery);
+            $('apiJson').textContent = `${base}/search?q=${q}&format=json&pageno=${currentPage}`;
+            $('apiCsv').textContent = `${base}/search?q=${q}&format=csv&pageno=${currentPage}`;
+            $('apiRss').textContent = `${base}/search?q=${q}&format=rss&pageno=${currentPage}`;
+            $('apiCurl').textContent = `curl "${base}/search?q=${q}&format=json"`;
+
+            // 分页
+            renderPagination();
+
+            // 默认显示网页标签
+            switchTab('web');
+        }
+
+        // ===== 分页 =====
+        function renderPagination() {
+            const container = $('pagination');
+            const prevDisabled = currentPage <= 1;
+
+            container.innerHTML = `
+                <button onclick="doSearch(${currentPage - 1})" ${prevDisabled ? 'disabled' : ''} 
+                    class="px-4 py-2 rounded-lg text-sm ${prevDisabled ? 'bg-card text-muted/30 cursor-not-allowed' : 'bg-card border border-border text-muted hover:text-white hover:border-accent/50'} transition-colors">
+                    ← 上一页
+                </button>
+                <span class="text-sm text-muted">第 ${currentPage} 页</span>
+                <button onclick="doSearch(${currentPage + 1})" 
+                    class="px-4 py-2 rounded-lg text-sm bg-card border border-border text-muted hover:text-white hover:border-accent/50 transition-colors">
+                    下一页 →
+                </button>
+            `;
+        }
+
+        // ===== 标签切换 =====
+        function switchTab(tab) {
+            ['web', 'raw', 'api'].forEach(t => {
+                const el = $(`results${t.charAt(0).toUpperCase() + t.slice(1)}`);
+                const tabEl = $(`tab${t.charAt(0).toUpperCase() + t.slice(1)}`);
+                if (t === tab) {
+                    el.classList.remove('hidden');
+                    tabEl.className = tabEl.className.replace('text-muted', '').replace('hover:text-white', '') + ' tab-active';
+                } else {
+                    el.classList.add('hidden');
+                    tabEl.className = tabEl.className.replace('tab-active', '') + ' text-muted hover:text-white';
+                }
+            });
+        }
+
+        // ===== 工具函数 =====
+        function escapeHtml(str) {
+            if (!str) return '';
+            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+            return String(str).replace(/[&<>"']/g, c => map[c]);
+        }
+
+        function syntaxHighlight(json) {
+            return json.replace(/("(\\u[\da-fA-F]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, match => {
+                let cls = 'json-number';
+                if (/^"/.test(match)) {
+                    cls = /:$/.test(match) ? 'json-key' : 'json-string';
+                }
+                return `<span class="${cls}">${match}</span>`;
+            });
+        }
+
+        // ===== 键盘快捷键 =====
+        document.addEventListener('keydown', e => {
+            // / 聚焦搜索框
+            if (e.key === '/' && document.activeElement !== searchInput) {
+                e.preventDefault();
+                searchInput.focus();
+            }
+        });
+    </script>
+</body>
+</html>
