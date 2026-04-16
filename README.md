@@ -87,9 +87,12 @@ web-search/
 | **可选** | Redis（用于缓存加速） |
 
 > ⚠️ Laragon 用户注意：默认可能缺少 `php.ini`，项目已提供配置参考（见 `DEPLOY.md`）。
-> Laragon一键布署PHP环境：https://laragon.org/download
-> 手动布署PHP环境：https://getcomposer.org/Composer-Setup.exe
-> https://windows.php.net/download/ （下载 x64 Thread Safe 的Zip）
+> 
+Laragon一键布署PHP环境：https://laragon.org/download
+
+手动布署PHP环境：https://getcomposer.org/Composer-Setup.exe
+
+https://windows.php.net/download/ （下载 x64 Thread Safe 的Zip）
 
 ### 一键启动
 
