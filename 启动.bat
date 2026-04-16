@@ -15,7 +15,7 @@ where php >nul 2>nul
 if %errorlevel% neq 0 (
     set "PHP=C:\laragon\bin\php\php-8.3.30-Win32-vs16-x64\php.exe"
     if not exist "%PHP%" (
-        echo [错误] 找不到 PHP，请确认 Laragon 已安装或 PHP 已加入 PATH
+        echo [错误] 找不到 PHP，请确认 Laragon 已安装或 PHP 已加入 PATH复制链接下载：https://laragon.org/download
         pause
         exit /b 1
     )
